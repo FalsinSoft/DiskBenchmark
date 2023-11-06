@@ -40,7 +40,7 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 
 	for(unsigned long long i = 0; i < blockNumber; i++)
 	{
-		if(WriteFile(hFile, block, blockSize, &bytesWritten, NULL) == FALSE || bytesWritten != blockSize)
+		if(WriteFile(hFile, block, static_cast<DWORD>(blockSize), &bytesWritten, NULL) == FALSE || bytesWritten != blockSize)
 		{
 			delete[] name;
 			return false;
@@ -49,7 +49,7 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 
 	CloseHandle(hFile);
 	
-	m_fileFlags = (FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OVERLAPPED);
+	m_fileFlags = FILE_FLAG_OVERLAPPED;
 	if(directAccess) m_fileFlags |= (FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
 	m_hFile = CreateFile(name,
 						 GENERIC_READ | GENERIC_WRITE,
@@ -121,7 +121,7 @@ SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long lo
 	pOvl->OffsetHigh = (offset >> 32);
 	pOvl->hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-	if(WriteFile(file, block, size, NULL, pOvl) == FALSE)
+	if(WriteFile(file, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
 	{
 		const auto error = GetLastError();
 
@@ -143,7 +143,7 @@ SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long lon
 	pOvl->OffsetHigh = (offset >> 32);
 	pOvl->hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
-	if(ReadFile(file, block, size, NULL, pOvl) == FALSE)
+	if(ReadFile(file, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
 	{
 		const auto error = GetLastError();
 
@@ -177,7 +177,6 @@ bool SystemFile::checkReadWriteStatus(FileHandle file, BlockHandle block)
 		throw runtime_error("GetOverlappedResult() return error " + error);
 	}
 
-	ResetEvent(block->hEvent);
 	CloseHandle(block->hEvent);
 	delete block;
 

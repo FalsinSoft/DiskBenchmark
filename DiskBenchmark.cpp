@@ -20,7 +20,6 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 	{
 		future<ThreadInfo> status;
 		thread instance;
-		bool running;
 	};
 	vector<ThreadData> threads(threadNumber);
 	vector<ThreadInfo> threadInfoList;
@@ -47,14 +46,9 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 	for(auto &thread : threads)
 	{
 		promise<ThreadInfo> promise;
-
-		thread.running = true;
 		thread.status = promise.get_future();
-		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, ref(thread.running), move(promise), readPercentange, randomAccess, taskNumber, fileSize, blockSize);
+		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, move(promise), seconds, readPercentange, randomAccess, taskNumber, fileSize, blockSize);
 	}
-
-	this_thread::sleep_for(std::chrono::seconds(seconds));
-	for(auto &thread : threads) thread.running = false;
 
 	while(!threads.empty())
 	{
@@ -80,7 +74,7 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 	return threadInfoList;
 }
 
-void DiskBenchmark::executeTasks(const bool &running, promise<ThreadInfo> promise, unsigned char readPercentange, bool randomAccess, unsigned int taskNumber, unsigned long long fileSize, unsigned long long blockSize)
+void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int seconds, unsigned char readPercentange, bool randomAccess, unsigned int taskNumber, unsigned long long fileSize, unsigned long long blockSize)
 {
 	struct TaskData
 	{
@@ -90,12 +84,14 @@ void DiskBenchmark::executeTasks(const bool &running, promise<ThreadInfo> promis
 	};
 	const auto maxBlocksNumber = (fileSize / blockSize);
 	const auto readOffsetNumber = ((maxBlocksNumber * readPercentange) / 100);
+	chrono::steady_clock::time_point startTime;
 	int activeTasksCounter, offsetIndex;
 	vector<TaskData> tasks(taskNumber);
 	vector<unsigned long long> offsets;
 	SystemFile::FileHandle file;
 	unsigned char *buffer;
 	ThreadInfo threadInfo;
+	bool running;
 
 	for(unsigned long long i = 0; i < maxBlocksNumber; i++) offsets.push_back(blockSize * i);
 	if(randomAccess)
@@ -111,9 +107,13 @@ void DiskBenchmark::executeTasks(const bool &running, promise<ThreadInfo> promis
 	{
 		file = m_systemFile->openFile();
 
+		running = true;
 		activeTasksCounter = offsetIndex = 0;
+		startTime = chrono::high_resolution_clock::now();
 		do
 		{
+			if(running) running = (chrono::duration_cast<chrono::seconds>(chrono::high_resolution_clock::now() - startTime).count() < seconds) ? true : false;
+
 			for(auto &task : tasks)
 			{
 				if(task.block != nullptr)

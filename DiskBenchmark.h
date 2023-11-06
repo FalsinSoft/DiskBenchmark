@@ -23,7 +23,7 @@ public:
 private:
 	std::unique_ptr<SystemFile> m_systemFile;
 
-	void executeTasks(const bool &running, std::promise<ThreadInfo> promise, unsigned char readPercentange, bool randomAccess, unsigned int taskNumber, unsigned long long fileSize, unsigned long long blockSize);
+	void executeTasks(std::promise<ThreadInfo> promise, unsigned int seconds, unsigned char readPercentange, bool randomAccess, unsigned int taskNumber, unsigned long long fileSize, unsigned long long blockSize);
 	void fillBlock(unsigned char *block, unsigned long long size) const;
 	bool checkBlock(unsigned char *block, unsigned long long size) const;
 	unsigned int crc32(unsigned char *buffer, unsigned long long size) const;
