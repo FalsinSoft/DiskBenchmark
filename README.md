@@ -5,7 +5,7 @@ Basic tool to test disk benchmark
 Options:\
 &emsp;-h,--help&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;Print this help message and exit\
 &emsp;-s,--seconds INT&emsp;&emsp;&emsp;&emsp;&emsp;Duration of test in seconds\
-&emsp;-p,--read_percentage INT&emsp;Percentage of read operations (remaining operations are write)\
+&emsp;-i,--io_type TEXT&emsp;&emsp;&emsp;&emsp;&emsp;I/O test type (r -> read, w -> write, rw -> read/write)\
 &emsp;-r,--random&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;Random read/write\
 &emsp;-t,--thread INT&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;&nbsp;Number of thread to use for the test\
 &emsp;-o,--task INT&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;Number of I/O operation per thread\

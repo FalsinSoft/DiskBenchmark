@@ -14,21 +14,24 @@ DiskBenchmark::~DiskBenchmark()
 {
 }
 
-vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int seconds, unsigned char readPercentange, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
+vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int seconds, IOType ioType, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
 {
 	struct ThreadData
 	{
 		future<ThreadInfo> status;
 		thread instance;
 	};
+	const auto offsets = calculateOffsets(fileSize, blockSize, ioType, randomAccess);
+	const auto pageSize = m_systemFile->getMemoryPageSize();
 	vector<ThreadData> threads(threadNumber);
 	vector<ThreadInfo> threadInfoList;
+	unsigned int startOffsetindex;
 	unsigned char *block;
 	bool result;
 
-	if(blockSize % 512)
+	if(blockSize % pageSize)
 	{
-		cerr << "Block size must be 512 bytes aligned" << endl;
+		cerr << "Block size must be " << pageSize << " bytes aligned" << endl;
 		return threadInfoList;
 	}
 
@@ -43,11 +46,13 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 		return threadInfoList;
 	}
 
+	startOffsetindex = 0;
 	for(auto &thread : threads)
 	{
 		promise<ThreadInfo> promise;
 		thread.status = promise.get_future();
-		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, move(promise), seconds, readPercentange, randomAccess, taskNumber, fileSize, blockSize);
+		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, move(promise), seconds, taskNumber, blockSize, startOffsetindex, ref(offsets));
+		startOffsetindex += (offsets.size() / threads.size());
 	}
 
 	while(!threads.empty())
@@ -74,7 +79,7 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 	return threadInfoList;
 }
 
-void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int seconds, unsigned char readPercentange, bool randomAccess, unsigned int taskNumber, unsigned long long fileSize, unsigned long long blockSize)
+void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int seconds, unsigned int taskNumber, unsigned long long blockSize, unsigned int startOffsetindex, const vector<OffsetData> &offsets)
 {
 	struct TaskData
 	{
@@ -82,24 +87,13 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 		unsigned char *buffer = nullptr;
 		bool read = true;
 	};
-	const auto maxBlocksNumber = (fileSize / blockSize);
-	const auto readOffsetNumber = ((maxBlocksNumber * readPercentange) / 100);
-	chrono::steady_clock::time_point startTime;
+	chrono::time_point<chrono::steady_clock> startTime;
 	int activeTasksCounter, offsetIndex;
 	vector<TaskData> tasks(taskNumber);
-	vector<unsigned long long> offsets;
 	SystemFile::FileHandle file;
 	unsigned char *buffer;
 	ThreadInfo threadInfo;
 	bool running;
-
-	for(unsigned long long i = 0; i < maxBlocksNumber; i++) offsets.push_back(blockSize * i);
-	if(randomAccess)
-	{
-		random_device rd;
-		default_random_engine rng(rd());
-		shuffle(offsets.begin(), offsets.end(), rng);
-	}
 
 	buffer = m_systemFile->allocateAlignedMemory(blockSize * taskNumber);
 	for(unsigned int i = 0; i < taskNumber; i++) tasks[i].buffer = &buffer[blockSize * i];
@@ -108,11 +102,12 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 		file = m_systemFile->openFile();
 
 		running = true;
-		activeTasksCounter = offsetIndex = 0;
-		startTime = chrono::high_resolution_clock::now();
+		activeTasksCounter = 0;
+		offsetIndex = startOffsetindex;
+		startTime = chrono::steady_clock::now();
 		do
 		{
-			if(running) running = (chrono::duration_cast<chrono::seconds>(chrono::high_resolution_clock::now() - startTime).count() < seconds) ? true : false;
+			if(running) running = (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - startTime).count() < seconds) ? true : false;
 
 			for(auto &task : tasks)
 			{
@@ -120,7 +115,7 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 				{
 					if(m_systemFile->checkReadWriteStatus(file, task.block))
 					{
-						if(task.read)
+						if(task.read == true)
 						{
 							if(!checkBlock(task.buffer, blockSize)) throw runtime_error("Read block crc failed");
 						}
@@ -128,7 +123,7 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 						activeTasksCounter--;
 
 						threadInfo.totalBytesReadWrite += blockSize;
-						if(task.read)
+						if(task.read == true)
 							threadInfo.totalReadOperations++;
 						else
 							threadInfo.totalWriteOperations++;
@@ -138,16 +133,15 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 				{
 					const auto offset = offsets.at(offsetIndex++);
 
-					task.read = (offsets.size() <= readOffsetNumber) ? true : false;
-
-					if(task.read)
+					task.read = offset.read;
+					if(task.read == true)
 					{
-						task.block = m_systemFile->readBlock(file, offset, task.buffer, blockSize);
+						task.block = m_systemFile->readBlock(file, offset.address, task.buffer, blockSize);
 					}
 					else
 					{
 						fillBlock(task.buffer, blockSize);
-						task.block = m_systemFile->writeBlock(file, offset, task.buffer, blockSize);
+						task.block = m_systemFile->writeBlock(file, offset.address, task.buffer, blockSize);
 					}
 
 					if(offsetIndex >= offsets.size()) offsetIndex = 0;
@@ -166,6 +160,41 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 	m_systemFile->freeAlignedMemory(buffer);
 
 	promise.set_value(threadInfo);
+}
+
+vector<DiskBenchmark::OffsetData> DiskBenchmark::calculateOffsets(unsigned long long fileSize, unsigned long long blockSize, IOType ioType, bool randomAccess) const
+{
+	const auto maxBlocksNumber = (fileSize / blockSize);
+	vector<OffsetData> offsets;
+	random_device randomDev;
+	default_random_engine randomEngine(randomDev());
+	uniform_int_distribution<int> ioTypeRandomGenerator(static_cast<int>(IOType::Read), static_cast<int>(IOType::Write));
+
+	for(unsigned long long i = 0; i < maxBlocksNumber; i++)
+	{
+		OffsetData offset;
+
+		offset.address = (blockSize * i);
+		switch(ioType)
+		{
+			case IOType::Read:
+				offset.read = true;
+				break;
+			case IOType::Write:
+				offset.read = false;
+				break;
+			case IOType::ReadWrite:
+				offset.read = (static_cast<IOType>(ioTypeRandomGenerator(randomEngine)) == IOType::Read) ? true : false;
+				break;
+		}
+		offsets.push_back(offset);
+	}
+	if(randomAccess)
+	{
+		shuffle(offsets.begin(), offsets.end(), randomEngine);
+	}
+
+	return offsets;
 }
 
 void DiskBenchmark::fillBlock(unsigned char *block, unsigned long long size) const

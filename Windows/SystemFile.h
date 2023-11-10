@@ -23,6 +23,7 @@ public:
 	bool checkReadWriteStatus(FileHandle file, BlockHandle block);
 	unsigned char* allocateAlignedMemory(unsigned long long size);
 	void freeAlignedMemory(unsigned char *ptr);
+	unsigned int getMemoryPageSize();
 
 private:
 	HANDLE m_hFile;

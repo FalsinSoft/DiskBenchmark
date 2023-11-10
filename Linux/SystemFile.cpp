@@ -156,3 +156,8 @@ void SystemFile::freeAlignedMemory(unsigned char *ptr)
 {
 	free(ptr);
 }
+
+unsigned int SystemFile::getMemoryPageSize()
+{
+	return getpagesize();
+}

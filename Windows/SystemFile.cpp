@@ -192,3 +192,10 @@ void SystemFile::freeAlignedMemory(unsigned char *ptr)
 {
 	VirtualFree(ptr, 0, MEM_RELEASE);
 }
+
+unsigned int SystemFile::getMemoryPageSize()
+{
+	SYSTEM_INFO systemInfo;
+	GetSystemInfo(&systemInfo);
+	return systemInfo.dwPageSize;
+}
