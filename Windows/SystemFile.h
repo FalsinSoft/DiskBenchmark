@@ -1,13 +1,12 @@
 #pragma once
 
-#include <map>
 #include <iostream>
 #include <Windows.h>
 
 class SystemFile
 {
 public:
-	SystemFile();
+	SystemFile(std::exception_ptr &exception);
 	~SystemFile();
 
 	using FileHandle = HANDLE;

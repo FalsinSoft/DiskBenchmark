@@ -10,7 +10,7 @@ class SystemFile
 	typedef aiocb *paiocb;
 
 public:
-	SystemFile();
+	SystemFile(std::exception_ptr &exception);
 	~SystemFile();
 
 	using FileHandle = int;

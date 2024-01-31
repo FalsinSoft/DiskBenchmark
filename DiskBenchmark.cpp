@@ -6,12 +6,18 @@
 
 using namespace std;
 
-DiskBenchmark::DiskBenchmark() : m_systemFile(new SystemFile())
+DiskBenchmark::DiskBenchmark() : m_systemFile(new SystemFile(m_exception)),
+								 m_logMsgFunction([](const string &logMsg){})
 {
 }
 
 DiskBenchmark::~DiskBenchmark()
 {
+}
+
+void DiskBenchmark::setLogMsgFunction(const LogMsgFunction &logMsgFunction)
+{
+	m_logMsgFunction = logMsgFunction;
 }
 
 vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int seconds, IOType ioType, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
@@ -25,7 +31,7 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 	const auto pageSize = m_systemFile->getMemoryPageSize();
 	vector<ThreadData> threads(threadNumber);
 	vector<ThreadInfo> threadInfoList;
-	unsigned int startOffsetindex;
+	unsigned int startOffsetIndex;
 	unsigned char *block;
 	bool result;
 
@@ -35,6 +41,7 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 		return threadInfoList;
 	}
 
+	m_logMsgFunction("Initialization...");
 	block = new unsigned char[blockSize];
 	fillBlock(block, blockSize);
 	result = m_systemFile->initialize(fileName, true, fileSize, block, blockSize);
@@ -42,36 +49,46 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 
 	if(result == false)
 	{
-		cerr << "Initialize failed!" << endl;
+		cerr << "Initialization failed!" << endl;
 		return threadInfoList;
 	}
 
-	startOffsetindex = 0;
+	m_logMsgFunction("Start test threads");
+	startOffsetIndex = 0;
 	for(auto &thread : threads)
 	{
 		promise<ThreadInfo> promise;
 		thread.status = promise.get_future();
-		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, move(promise), seconds, taskNumber, blockSize, startOffsetindex, ref(offsets));
-		startOffsetindex += (offsets.size() / threads.size());
+		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, move(promise), seconds, taskNumber, blockSize, startOffsetIndex, ref(offsets));
+		startOffsetIndex += (offsets.size() / threads.size());
 	}
 
-	while(!threads.empty())
+	try
 	{
-		auto thread = threads.begin();
-
-		while(thread != threads.end())
+		while(!threads.empty())
 		{
-			if(thread->status.wait_for(std::chrono::milliseconds(0)) == future_status::ready)
+			auto thread = threads.begin();
+
+			while(thread != threads.end())
 			{
-				if(thread->instance.joinable()) thread->instance.join();
-				threadInfoList.push_back(thread->status.get());
-				thread = threads.erase(thread);
+				if(thread->status.wait_for(std::chrono::milliseconds(0)) == future_status::ready)
+				{
+					if(thread->instance.joinable()) thread->instance.join();
+					threadInfoList.push_back(thread->status.get());
+					thread = threads.erase(thread);
+				}
+				else
+				{
+					++thread;
+				}
 			}
-			else
-			{
-				++thread;
-			}
+
+			if(m_exception) rethrow_exception(m_exception);
 		}
+	}
+	catch(runtime_error &e)
+	{
+		cerr << "Taks error: " << e.what() << endl;
 	}
 	
 	m_systemFile->close();
@@ -79,7 +96,7 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 	return threadInfoList;
 }
 
-void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int seconds, unsigned int taskNumber, unsigned long long blockSize, unsigned int startOffsetindex, const vector<OffsetData> &offsets)
+void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int seconds, unsigned int taskNumber, unsigned long long blockSize, unsigned int startOffsetIndex, const vector<OffsetData> &offsets)
 {
 	struct TaskData
 	{
@@ -103,7 +120,7 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 
 		running = true;
 		activeTasksCounter = 0;
-		offsetIndex = startOffsetindex;
+		offsetIndex = startOffsetIndex;
 		startTime = chrono::steady_clock::now();
 		do
 		{
@@ -152,10 +169,10 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 
 		m_systemFile->closeFile(file);
 	}
-	catch(runtime_error &e)
+	catch(...)
 	{
-		cerr << "Taks error: " << e.what() << endl;
 		threadInfo.totalBytesReadWrite = 0;
+		m_exception = current_exception();
 	}
 	m_systemFile->freeAlignedMemory(buffer);
 

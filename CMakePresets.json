@@ -49,12 +49,13 @@
             "vendor": {
                 "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
                     "sourceDir": "$env{HOME}/projects/$ms{projectDirName}",
+                    "copyBuildOutput": true
                 }
             }
         },
         {
             "name": "linux-debug",
-            "displayName": "Debug",
+            "displayName": "x64 Debug",
             "inherits": "linux-base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
@@ -62,7 +63,7 @@
         },
         {
             "name": "linux-release",
-            "displayName": "Release",
+            "displayName": "x64 Release",
             "inherits": "linux-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"

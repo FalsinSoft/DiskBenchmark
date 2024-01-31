@@ -5,7 +5,7 @@
 
 using namespace std;
 
-SystemFile::SystemFile() : m_hFile(-1)
+SystemFile::SystemFile(exception_ptr &exception) : m_hFile(-1)
 {
 }
 
@@ -27,7 +27,6 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 		cerr << "Unable to create file " << fileName << endl;
 		return false;
 	}
-
 	for(unsigned long long i = 0; i < blockNumber; i++)
 	{
 		if(write(hFile, block, blockSize) != blockSize)
@@ -36,7 +35,7 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 			return false;
 		}
 	}
-
+	fsync(hFile);
 	::close(hFile);
 	
 	m_fileFlags = O_RDWR;
@@ -140,8 +139,8 @@ bool SystemFile::checkReadWriteStatus(FileHandle file, BlockHandle block)
 	{
 		throw runtime_error(string("aio_return() return error ") + strerror(errno));
 	}
-
 	delete block;
+
 	return true;
 }
 

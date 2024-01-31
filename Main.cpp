@@ -5,7 +5,7 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
-	CLI::Option *optSeconds, *optIOType, *optRandom, *optThreadNumber, *optTaskNumber, *optFileName, *optFileSize, *optBlockSize;
+	CLI::Option *optSeconds, *optIOType, *optRandom, *optThreadNumber, *optTaskNumber, *optFileName, *optFileSize, *optBlockSize, *optShowLog;
 	CLI::App app("DiskBenchmark");
 	DiskBenchmark diskBenchmark;
 	int seconds, threadNumber, taskNumber;
@@ -24,6 +24,7 @@ int main(int argc, char **argv)
 	optFileName = app.add_option("-n,--file_name", fileName, "Name of the file to use for test");
 	optFileSize = app.add_option("-z,--file_size", fileSize, "Size of the file to use for test (in Mb)");
 	optBlockSize = app.add_option("-b,--block_size", blockSize, "Size of the block to read/write (in Kb)");
+	optShowLog = app.add_flag("-l,--log", "Show log messages");
 	CLI11_PARSE(app, argc, argv);
 	
 	if(optSeconds->count() == 0 || seconds == 0
@@ -51,14 +52,19 @@ int main(int argc, char **argv)
 	randomAccess = (optRandom->count() > 0) ? true : false;
 	fileSize *= (1024 * 1024);
 	blockSize *= 1024;
-	
+
+	if(optShowLog->count() > 0) diskBenchmark.setLogMsgFunction([](const string &logMsg) { cout << logMsg << endl; });
+
 	cout << "Start benchmark..." << endl;
 	threadInfoList = diskBenchmark.executeTest(seconds, ioType, randomAccess, threadNumber, taskNumber, fileName, fileSize, blockSize);
 	if(threadInfoList.size() > 0)
 	{
 		for(const auto &threadInfo : threadInfoList)
 		{
-			cout << "Read ops: " << threadInfo.totalReadOperations << " - Write ops: " << threadInfo.totalWriteOperations << endl;
+			cout << "Read ops: " << threadInfo.totalReadOperations << " - "
+				 << "Write ops: " << threadInfo.totalWriteOperations << " - "
+				 << "Total read/write (KB): " << static_cast<double>(threadInfo.totalBytesReadWrite / 1024)
+				 << endl;
 
 			if(threadInfo.totalBytesReadWrite > 0)
 				totalBytesReadWrite += threadInfo.totalBytesReadWrite;

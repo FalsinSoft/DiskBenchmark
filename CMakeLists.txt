@@ -12,6 +12,8 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME})
 
 add_executable(${PROJECT_NAME}
+	${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME}/SystemFile.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME}/SystemFile.h
 	${CMAKE_CURRENT_SOURCE_DIR}/DiskBenchmark.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/DiskBenchmark.h
 	${CMAKE_CURRENT_SOURCE_DIR}/Main.cpp
@@ -22,5 +24,3 @@ if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows")
 else()
 	target_link_libraries(${PROJECT_NAME} PRIVATE rt pthread)
 endif()
-
-add_subdirectory("${PROJECT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME}")

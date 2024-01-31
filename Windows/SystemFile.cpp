@@ -3,7 +3,7 @@
 
 using namespace std;
 
-SystemFile::SystemFile() : m_hFile(INVALID_HANDLE_VALUE)
+SystemFile::SystemFile(exception_ptr &exception) : m_hFile(INVALID_HANDLE_VALUE)
 {
 }
 
@@ -14,18 +14,17 @@ SystemFile::~SystemFile()
 
 bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize)
 {
-	const auto nameLength = MultiByteToWideChar(CP_ACP, 0, fileName.c_str(), -1, NULL, 0);
 	const auto blockNumber = (fileSize / blockSize);
+	vector<TCHAR> name;
 	DWORD bytesWritten;
-	wchar_t *name;
 	HANDLE hFile;
 
 	close();
 
-	name = new wchar_t[nameLength];
-	MultiByteToWideChar(CP_ACP, 0, fileName.c_str(), -1, name, nameLength);
-
-	hFile = CreateFile(name,
+	name.resize(MultiByteToWideChar(CP_ACP, 0, fileName.c_str(), -1, NULL, 0));
+	MultiByteToWideChar(CP_ACP, 0, fileName.c_str(), -1, name.data(), name.size());
+	
+	hFile = CreateFile(name.data(),
 					   GENERIC_WRITE,
 					   NULL,
 					   NULL,
@@ -34,24 +33,21 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 					   NULL);
 	if(hFile == INVALID_HANDLE_VALUE)
 	{
-		delete[] name;
 		return false;
 	}
-
 	for(unsigned long long i = 0; i < blockNumber; i++)
 	{
 		if(WriteFile(hFile, block, static_cast<DWORD>(blockSize), &bytesWritten, NULL) == FALSE || bytesWritten != blockSize)
 		{
-			delete[] name;
 			return false;
 		}
 	}
-
+	FlushFileBuffers(hFile);
 	CloseHandle(hFile);
 	
 	m_fileFlags = FILE_FLAG_OVERLAPPED;
 	if(directAccess) m_fileFlags |= (FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
-	m_hFile = CreateFile(name,
+	m_hFile = CreateFile(name.data(),
 						 GENERIC_READ | GENERIC_WRITE,
 						 FILE_SHARE_READ | FILE_SHARE_WRITE,
 						 NULL,
@@ -60,12 +56,9 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 						 NULL);
 	if(m_hFile == INVALID_HANDLE_VALUE)
 	{
-		delete[] name;
 		return false;
 	}
 	
-	delete[] name;
-
 	return true;
 }
 
