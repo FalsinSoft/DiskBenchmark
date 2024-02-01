@@ -1,6 +1,7 @@
 #include <vector>
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
 #include "SystemFile.h"
 
 using namespace std;
@@ -63,14 +64,19 @@ void SystemFile::close()
 	}
 }
 
-SystemFile::FileHandle SystemFile::openFile()
+SystemFile::FileHandle SystemFile::openFile(unsigned int taskNumber)
 {
 	FileHandle file;
 
-	file = open(m_fileName.c_str(), m_fileFlags);
-	if(file == -1)
+	file.handle = open(m_fileName.c_str(), m_fileFlags);
+	if(file.handle == -1)
 	{
 		throw runtime_error(string("open() return error ") + strerror(errno));
+	}
+	memset(&file.context, 0, sizeof(file.context));
+	if(io_setup(taskNumber, &file.context) != 0)
+	{
+		throw runtime_error("io_setup() error");
 	}
 
 	return file;
@@ -78,70 +84,54 @@ SystemFile::FileHandle SystemFile::openFile()
 
 void SystemFile::closeFile(FileHandle file)
 {
-	::close(file);
+	io_destroy(file.context);
+	::close(file.handle);
 }
 
 SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
 {
-	aiocb *aio = new aiocb;
+	iocb *request = new iocb;
 
-	memset(aio, 0, sizeof(aiocb));
-	aio->aio_fildes = file;
-	aio->aio_offset = offset;
-	aio->aio_buf = block;
-	aio->aio_nbytes = size;
-	aio->aio_lio_opcode = LIO_NOP;
-	aio->aio_sigevent.sigev_notify = SIGEV_NONE;
-
-	if(aio_write(aio) == -1)
+	io_prep_pwrite(request, file.handle, block, size, offset);
+	if(io_submit(file.context, 1, &request) != 1)
 	{
-		throw runtime_error(string("aio_write() return error ") + strerror(errno));
+		throw runtime_error("io_submit() error");
 	}
 
-	return aio;
+	return request;
 }
 
 SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
 {
-	aiocb *aio = new aiocb;
+	iocb *request = new iocb;
 
-	memset(aio, 0, sizeof(aiocb));
-	aio->aio_fildes = file;
-	aio->aio_offset = offset;
-	aio->aio_buf = block;
-	aio->aio_nbytes = size;
-	aio->aio_lio_opcode = LIO_NOP;
-	aio->aio_sigevent.sigev_notify = SIGEV_NONE;
-
-	if(aio_read(aio) == -1)
+	io_prep_pread(request, file.handle, block, size, offset);
+	if(io_submit(file.context, 1, &request) != 1)
 	{
-		throw runtime_error(string("aio_write() return error ") + strerror(errno));
+		throw runtime_error("io_submit() error");
 	}
 
-	return aio;
+	return request;
 }
 
-bool SystemFile::checkReadWriteStatus(FileHandle file, BlockHandle block)
+SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
 {
-	int result;
-	
-	result = aio_error(block);
-	if(result != 0)
+	io_event event;
+
+	memset(&event, 0, sizeof(event));
+	io_getevents(file.context, 0, 1, &event, NULL);
+	if(event.obj != NULL);
 	{
-		if(result == EINPROGRESS)
+		iocb *request = event.obj;
+		if(event.res < 0)
 		{
-			return false;
+			throw runtime_error("io_getevents() event error");
 		}
-
-		throw runtime_error(string("aio_error() return error ") + strerror(errno));
+		delete request;
+		return request;
 	}
-	if(aio_return(block) < block->aio_nbytes)
-	{
-		throw runtime_error(string("aio_return() return error ") + strerror(errno));
-	}
-	delete block;
 
-	return true;
+	return nullptr;
 }
 
 unsigned char* SystemFile::allocateAlignedMemory(unsigned long long size)

@@ -105,6 +105,7 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 		bool read = true;
 	};
 	chrono::time_point<chrono::steady_clock> startTime;
+	SystemFile::BlockHandle completedBlock;
 	int activeTasksCounter, offsetIndex;
 	vector<TaskData> tasks(taskNumber);
 	SystemFile::FileHandle file;
@@ -112,11 +113,12 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 	ThreadInfo threadInfo;
 	bool running;
 
+	m_logMsgFunction("Execute task thread started");
 	buffer = m_systemFile->allocateAlignedMemory(blockSize * taskNumber);
 	for(unsigned int i = 0; i < taskNumber; i++) tasks[i].buffer = &buffer[blockSize * i];
 	try
 	{
-		file = m_systemFile->openFile();
+		file = m_systemFile->openFile(taskNumber);
 
 		running = true;
 		activeTasksCounter = 0;
@@ -126,11 +128,36 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 		{
 			if(running) running = (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - startTime).count() < seconds) ? true : false;
 
-			for(auto &task : tasks)
+			if(running)
 			{
-				if(task.block != nullptr)
+				for(auto &task : tasks)
 				{
-					if(m_systemFile->checkReadWriteStatus(file, task.block))
+					if(task.block == nullptr)
+					{
+						const auto offset = offsets.at(offsetIndex++);
+
+						task.read = offset.read;
+						if(task.read == true)
+						{
+							task.block = m_systemFile->readBlock(file, offset.address, task.buffer, blockSize);
+						}
+						else
+						{
+							fillBlock(task.buffer, blockSize);
+							task.block = m_systemFile->writeBlock(file, offset.address, task.buffer, blockSize);
+						}
+
+						if(offsetIndex >= offsets.size()) offsetIndex = 0;
+						activeTasksCounter++;
+					}
+				}
+			}
+			
+			while((completedBlock = m_systemFile->getCompletedBlock(file)) != nullptr)
+			{
+				for(auto &task : tasks)
+				{
+					if(task.block == completedBlock)
 					{
 						if(task.read == true)
 						{
@@ -144,25 +171,9 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 							threadInfo.totalReadOperations++;
 						else
 							threadInfo.totalWriteOperations++;
-					}
-				}
-				else if(running == true)
-				{
-					const auto offset = offsets.at(offsetIndex++);
 
-					task.read = offset.read;
-					if(task.read == true)
-					{
-						task.block = m_systemFile->readBlock(file, offset.address, task.buffer, blockSize);
+						break;
 					}
-					else
-					{
-						fillBlock(task.buffer, blockSize);
-						task.block = m_systemFile->writeBlock(file, offset.address, task.buffer, blockSize);
-					}
-
-					if(offsetIndex >= offsets.size()) offsetIndex = 0;
-					activeTasksCounter++;
 				}
 			}
 		} while(running == true || activeTasksCounter > 0);
@@ -175,6 +186,7 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 		m_exception = current_exception();
 	}
 	m_systemFile->freeAlignedMemory(buffer);
+	m_logMsgFunction("Execute task thread finished");
 
 	promise.set_value(threadInfo);
 }

@@ -56,9 +56,10 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 						 NULL);
 	if(m_hFile == INVALID_HANDLE_VALUE)
 	{
+		DeleteFile(name.data());
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -76,7 +77,7 @@ void SystemFile::close()
 	}
 }
 
-SystemFile::FileHandle SystemFile::openFile()
+SystemFile::FileHandle SystemFile::openFile(unsigned int taskNumber)
 {
 	TCHAR filePath[MAX_PATH];
 	FileHandle file;
@@ -85,16 +86,21 @@ SystemFile::FileHandle SystemFile::openFile()
 	{
 		throw runtime_error("GetFinalPathNameByHandle() return error " + GetLastError());
 	}
-	file = CreateFile(filePath,
-					  GENERIC_READ | GENERIC_WRITE,
-					  FILE_SHARE_READ | FILE_SHARE_WRITE,
-					  NULL,
-					  OPEN_EXISTING,
-					  m_fileFlags,
-					  NULL);
-	if(file == INVALID_HANDLE_VALUE)
+	file.handle = CreateFile(filePath,
+							 GENERIC_READ | GENERIC_WRITE,
+							 FILE_SHARE_READ | FILE_SHARE_WRITE,
+							 NULL,
+							 OPEN_EXISTING,
+							 m_fileFlags,
+							 NULL);
+	if(file.handle == INVALID_HANDLE_VALUE)
 	{
 		throw runtime_error("CreateFile() return error " + GetLastError());
+	}
+	file.ioCompletionPort = CreateIoCompletionPort(file.handle, NULL, 0, 0);
+	if(file.ioCompletionPort == INVALID_HANDLE_VALUE)
+	{
+		throw runtime_error("CreateIoCompletionPort() return error " + GetLastError());
 	}
 
 	return file;
@@ -102,7 +108,8 @@ SystemFile::FileHandle SystemFile::openFile()
 
 void SystemFile::closeFile(FileHandle file)
 {
-	CloseHandle(file);
+	CloseHandle(file.ioCompletionPort);
+	CloseHandle(file.handle);
 }
 
 SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
@@ -112,9 +119,7 @@ SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long lo
 	ZeroMemory(pOvl, sizeof(OVERLAPPED));
 	pOvl->Offset = (offset & 0xFFFFFFFF);
 	pOvl->OffsetHigh = (offset >> 32);
-	pOvl->hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-
-	if(WriteFile(file, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
+	if(WriteFile(file.handle, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
 	{
 		const auto error = GetLastError();
 
@@ -134,9 +139,7 @@ SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long lon
 	ZeroMemory(pOvl, sizeof(OVERLAPPED));
 	pOvl->Offset = (offset & 0xFFFFFFFF);
 	pOvl->OffsetHigh = (offset >> 32);
-	pOvl->hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-
-	if(ReadFile(file, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
+	if(ReadFile(file.handle, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
 	{
 		const auto error = GetLastError();
 
@@ -149,31 +152,29 @@ SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long lon
 	return pOvl;
 }
 
-bool SystemFile::checkReadWriteStatus(FileHandle file, BlockHandle block)
+SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
 {
+	ULONG_PTR completionKey = 0;
 	DWORD bytesTransferred;
+	LPOVERLAPPED pOvl;
 	BOOL result;
 
-	result = GetOverlappedResult(file,
-								 block,
-								 &bytesTransferred,
-								 FALSE);
-	if(result == FALSE)
+	result = GetQueuedCompletionStatus(file.ioCompletionPort,
+									   &bytesTransferred,
+									   &completionKey,
+									   &pOvl,
+									   0);
+	if(result == TRUE)
 	{
-		const auto error = GetLastError();
-
-		if(error == ERROR_IO_INCOMPLETE)
-		{
-			return false;
-		}
-
-		throw runtime_error("GetOverlappedResult() return error " + error);
+		delete pOvl;
+		return pOvl;
+	}
+	else if(pOvl != NULL)
+	{
+		throw runtime_error("GetQueuedCompletionStatus() block operation failed");
 	}
 
-	CloseHandle(block->hEvent);
-	delete block;
-
-	return true;
+	return nullptr;
 }
 
 unsigned char* SystemFile::allocateAlignedMemory(unsigned long long size)

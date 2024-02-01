@@ -9,7 +9,10 @@ if(NOT ${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows" AND NOT ${CMAKE_HOST_SYSTEM_
 	message( FATAL_ERROR "Compilation system not supported" )
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME})
+include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}/Libraries
+	${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME}
+)
 
 add_executable(${PROJECT_NAME}
 	${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_HOST_SYSTEM_NAME}/SystemFile.cpp
@@ -22,5 +25,8 @@ add_executable(${PROJECT_NAME}
 if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Windows")
 	add_definitions(-DUNICODE -D_UNICODE)
 else()
-	target_link_libraries(${PROJECT_NAME} PRIVATE rt pthread)
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Libraries/libaio)
+	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Libraries/libaio aio)
+	target_link_libraries(${PROJECT_NAME} PRIVATE rt pthread aio)
+	#target_link_options(${PROJECT_NAME} PRIVATE -static)
 endif()

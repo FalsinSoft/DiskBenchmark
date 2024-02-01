@@ -11,4 +11,5 @@ Options:\
 &emsp;-o,--task INT&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;Number of I/O operation per thread\
 &emsp;-n,--file_name TEXT&emsp;&emsp;&emsp;&ensp;Name of the file to use for test\
 &emsp;-z,--file_size INT&emsp;&emsp;&emsp;&emsp;&emsp;Size of the file to use for test (in Mb)\
-&emsp;-b,--block_size INT&emsp;&emsp;&emsp;&ensp;&nbsp;Size of the block to read/write (in Kb)
+&emsp;-b,--block_size INT&emsp;&emsp;&emsp;&ensp;&nbsp;Size of the block to read/write (in Kb)\
+&emsp;-l,--log INT&emsp;&emsp;&emsp;&ensp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show log messages
