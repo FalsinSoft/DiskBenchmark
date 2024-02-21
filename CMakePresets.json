@@ -54,7 +54,7 @@
             }
         },
         {
-            "name": "linux-debug",
+            "name": "linux-debug-x64",
             "displayName": "x64 Debug",
             "inherits": "linux-base",
             "cacheVariables": {
@@ -62,9 +62,27 @@
             }
         },
         {
-            "name": "linux-release",
+            "name": "linux-release-x64",
             "displayName": "x64 Release",
-            "inherits": "linux-debug",
+            "inherits": "linux-debug-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+		    {
+            "name": "linux-debug-arm64",
+            "displayName": "arm64 Debug",
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+				        "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
+				        "CMAKE_CXX_COMPILER": "aarch64-linux-gnu-g++"
+            }
+        },
+        {
+            "name": "linux-release-arm64",
+            "displayName": "arm64 Release",
+            "inherits": "linux-debug-arm64",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }

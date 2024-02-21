@@ -20,7 +20,7 @@ void DiskBenchmark::setLogMsgFunction(const LogMsgFunction &logMsgFunction)
 	m_logMsgFunction = logMsgFunction;
 }
 
-vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int seconds, IOType ioType, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
+vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int seconds, IOType ioType, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, bool unalignedOffsets, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
 {
 	struct ThreadData
 	{
@@ -60,7 +60,7 @@ vector<DiskBenchmark::ThreadInfo> DiskBenchmark::executeTest(unsigned int second
 		promise<ThreadInfo> promise;
 		thread.status = promise.get_future();
 		thread.instance = std::thread(&DiskBenchmark::executeTasks, this, move(promise), seconds, taskNumber, blockSize, startOffsetIndex, ref(offsets));
-		startOffsetIndex += (offsets.size() / threads.size());
+		if(unalignedOffsets) startOffsetIndex += (offsets.size() / threads.size());
 	}
 
 	try
@@ -166,7 +166,6 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 						task.block = nullptr;
 						activeTasksCounter--;
 
-						threadInfo.totalBytesReadWrite += blockSize;
 						if(task.read == true)
 							threadInfo.totalReadOperations++;
 						else
@@ -182,7 +181,7 @@ void DiskBenchmark::executeTasks(promise<ThreadInfo> promise, unsigned int secon
 	}
 	catch(...)
 	{
-		threadInfo.totalBytesReadWrite = 0;
+		threadInfo.totalReadOperations = threadInfo.totalWriteOperations = 0;
 		m_exception = current_exception();
 	}
 	m_systemFile->freeAlignedMemory(buffer);

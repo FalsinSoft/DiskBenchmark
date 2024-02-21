@@ -27,12 +27,11 @@ public:
 	};
 	struct ThreadInfo
 	{
-		unsigned long long totalBytesReadWrite = 0;
 		unsigned int totalReadOperations = 0;
 		unsigned int totalWriteOperations = 0;
 	};
 
-	std::vector<ThreadInfo> executeTest(unsigned int seconds, IOType ioType, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize);
+	std::vector<ThreadInfo> executeTest(unsigned int seconds, IOType ioType, bool randomAccess, unsigned int threadNumber, unsigned int taskNumber, bool unalignedOffsets, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize);
 	void setLogMsgFunction(const LogMsgFunction &logMsgFunction);
 
 private:
