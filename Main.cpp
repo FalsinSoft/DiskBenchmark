@@ -5,19 +5,24 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
-	CLI::Option *optSeconds, *optIOType, *optRandom, *optThreadNumber, *optTaskNumber, *optUnalignedOffsets, *optFileName, *optFileSize, *optBlockSize, *optShowLog;
+	const auto calculateMBPerSec = [](unsigned long long totalBytes, unsigned long long msDuration)-> double
+	{
+		return (round(((static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / (static_cast<double>(msDuration) / 1000.0)) * 10.0) / 10.0);
+	};
+	CLI::Option *optSeconds, *optIOType, *optRandom, *optThreadNumber, *optTaskNumber, *optUnalignedOffsets,
+				*optFileName, *optFileSize, *optBlockSize, *optShowLog, *optReadPercentage;
 	CLI::App app("DiskBenchmark");
 	DiskBenchmark diskBenchmark;
-	int seconds, threadNumber, taskNumber;
-	vector<DiskBenchmark::ThreadInfo> threadInfoList;
-	unsigned long long totalBytesRead, totalBytesWrite;
+	int seconds, threadNumber, taskNumber, readPercentage;
+	DiskBenchmark::ThreadInfoList threadInfoList;
+	unsigned long long totalBytesRead, totalBytesWrite, msDuration;
 	long long fileSize, blockSize;
 	DiskBenchmark::IOType ioType;
 	string fileName, ioTypeParam;
-	bool randomAccess, unalignedOffsets;
 
-	optSeconds = app.add_option("-s,--seconds", seconds, "Duration of test in seconds");
+	optSeconds = app.add_option("-s,--seconds", seconds, "Duration of test in seconds (optional)");
 	optIOType = app.add_option("-i,--io_type", ioTypeParam, "I/O test type (r -> read, w -> write, rw -> read/write)");
+	optReadPercentage = app.add_option("-p,--read_percentage", readPercentage, "Percentage of read blocks for read/write test");
 	optRandom = app.add_flag("-r,--random", "Random read/write");
 	optThreadNumber = app.add_option("-t,--thread", threadNumber, "Number of thread to use for the test");
 	optTaskNumber = app.add_option("-o,--task", taskNumber, "Number of I/O operation per thread");
@@ -28,10 +33,7 @@ int main(int argc, char **argv)
 	optShowLog = app.add_flag("-l,--log", "Show log messages");
 	CLI11_PARSE(app, argc, argv);
 	
-	if(optSeconds->count() == 0 || seconds == 0
-	|| optIOType->count() == 0
-	|| optThreadNumber->count() == 0 || threadNumber == 0
-	|| optTaskNumber->count() == 0 || taskNumber == 0
+	if(optIOType->count() == 0
 	|| optFileName->count() == 0
 	|| optFileSize->count() == 0 || fileSize == 0
 	|| optBlockSize->count() == 0 || blockSize == 0)
@@ -50,39 +52,58 @@ int main(int argc, char **argv)
 		cerr << "Invalid I/O type test param (use -h for help)" << endl;
 		return 1;
 	}
-	randomAccess = (optRandom->count() > 0) ? true : false;
-	unalignedOffsets = (optUnalignedOffsets->count() > 0) ? true : false;
+	if(optShowLog->count() > 0) diskBenchmark.setLogMsgFunction([](const string& logMsg) { cout << logMsg << endl; });
+	if(optThreadNumber->count() == 0) threadNumber = 1;
+	if(optTaskNumber->count() == 0) taskNumber = 1;
+	if(optSeconds->count() > 0 && seconds > 0)
+	{
+		diskBenchmark.setSecondsDuration(seconds);
+	}
+	if(optReadPercentage->count() > 0)
+	{
+		if(readPercentage < 0 || readPercentage > 100)
+		{
+			cerr << "Incorrect read percentage value" << endl;
+			return 1;
+		}
+		diskBenchmark.setReadPercentage(static_cast<unsigned char>(readPercentage));
+	}
+	diskBenchmark.setRandomAccess((optRandom->count() > 0) ? true : false);
+	diskBenchmark.setUnalignedOffsets((optUnalignedOffsets->count() > 0) ? true : false);
 	fileSize *= (1024 * 1024);
 	blockSize *= 1024;
 
-	if(optShowLog->count() > 0) diskBenchmark.setLogMsgFunction([](const string &logMsg) { cout << logMsg << endl; });
-
-	cout << "Start benchmark..." << endl;
-	totalBytesRead = totalBytesWrite = 0;
-	threadInfoList = diskBenchmark.executeTest(seconds, ioType, randomAccess, threadNumber, taskNumber, unalignedOffsets, fileName, fileSize, blockSize);
+	cout << "Start benchmark..." << endl << endl;
+	totalBytesRead = totalBytesWrite = msDuration = 0;
+	threadInfoList = diskBenchmark.executeTest(ioType, threadNumber, taskNumber, fileName, fileSize, blockSize);
 	if(threadInfoList.size() > 0)
 	{
+		int threadCount = 1;
+
 		for(const auto &threadInfo : threadInfoList)
 		{
+			cout << "Thread " << threadCount++ << endl;
 			if(threadInfo.totalReadOperations == 0 && threadInfo.totalWriteOperations == 0)
 			{
-				cerr << "Thread error occurred" << endl;
+				cerr << "  Thread error occurred" << endl;
 				continue;
 			}
 			if(threadInfo.totalReadOperations > 0)
 			{
-				cout << "Read ops: " << threadInfo.totalReadOperations << " (" << static_cast<double>((threadInfo.totalReadOperations * blockSize) / 1024) << "KB)" << endl;
+				cout << "  Read ops: " << threadInfo.totalReadOperations << " (" << ((threadInfo.totalReadOperations * blockSize) / 1024) << "KB)" << endl;
 				totalBytesRead += (threadInfo.totalReadOperations * blockSize);
 			}
 			if(threadInfo.totalWriteOperations > 0)
 			{
-				cout << "Write ops: " << threadInfo.totalWriteOperations << " (" << static_cast<double>((threadInfo.totalWriteOperations * blockSize) / 1024) << "KB)" << endl;
+				cout << "  Write ops: " << threadInfo.totalWriteOperations << " (" << ((threadInfo.totalWriteOperations * blockSize) / 1024) << "KB)" << endl;
 				totalBytesWrite += (threadInfo.totalWriteOperations * blockSize);
 			}
+			if(threadInfo.msDuration > msDuration) msDuration = threadInfo.msDuration;
 		}
 	}
-	if(totalBytesRead > 0) cout << "Read MB/s " << (static_cast<double>(totalBytesRead / (1024 * 1024)) / static_cast<double>(seconds)) << endl;
-	if(totalBytesWrite > 0) cout << "Write MB/s " << (static_cast<double>(totalBytesWrite / (1024 * 1024)) / static_cast<double>(seconds)) << endl;
+	cout << endl << "Total test duration (ms): " << msDuration << endl;
+	if(totalBytesRead > 0) cout << "Read MB/s " << calculateMBPerSec(totalBytesRead, msDuration) << endl;
+	if(totalBytesWrite > 0) cout << "Write MB/s " << calculateMBPerSec(totalBytesWrite, msDuration) << endl;
 
 	return 0;
 }
