@@ -14,16 +14,16 @@ public:
 		HANDLE handle;
 		HANDLE ioCompletionPort;
 	};
-	using BlockHandle = LPOVERLAPPED;
+	using BlockHandle = OVERLAPPED;
 
 	bool initialize(const std::string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize);
 	void close();
 
 	FileHandle openFile(unsigned int taskNumber);
 	void closeFile(FileHandle file);
-	BlockHandle writeBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size);
-	BlockHandle readBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size);
-	BlockHandle getCompletedBlock(FileHandle file);
+	void writeBlock(FileHandle file, unsigned long long offset, unsigned char *data, unsigned long long size, BlockHandle *block);
+	void readBlock(FileHandle file, unsigned long long offset, unsigned char *data, unsigned long long size, BlockHandle *block);
+	BlockHandle* getCompletedBlock(FileHandle file);
 	unsigned char* allocateAlignedMemory(unsigned long long size);
 	void freeAlignedMemory(unsigned char *ptr);
 	unsigned int getMemoryPageSize();

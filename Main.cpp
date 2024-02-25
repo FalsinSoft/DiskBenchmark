@@ -102,8 +102,8 @@ int main(int argc, char **argv)
 		}
 	}
 	cout << endl << "Total test duration (ms): " << msDuration << endl;
-	if(totalBytesRead > 0) cout << "Read MB/s " << calculateMBPerSec(totalBytesRead, msDuration) << endl;
-	if(totalBytesWrite > 0) cout << "Write MB/s " << calculateMBPerSec(totalBytesWrite, msDuration) << endl;
+	if(totalBytesRead > 0) cout << "Read MB/s " << fixed << setprecision(1) << calculateMBPerSec(totalBytesRead, msDuration) << endl;
+	if(totalBytesWrite > 0) cout << "Write MB/s " << fixed << setprecision(1) << calculateMBPerSec(totalBytesWrite, msDuration) << endl;
 
 	return 0;
 }

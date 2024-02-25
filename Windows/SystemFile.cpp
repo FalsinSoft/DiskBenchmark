@@ -112,14 +112,12 @@ void SystemFile::closeFile(FileHandle file)
 	CloseHandle(file.handle);
 }
 
-SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
+void SystemFile::writeBlock(FileHandle file, unsigned long long offset, unsigned char *data, unsigned long long size, BlockHandle *block)
 {
-	LPOVERLAPPED pOvl = new OVERLAPPED;
-
-	ZeroMemory(pOvl, sizeof(OVERLAPPED));
-	pOvl->Offset = (offset & 0xFFFFFFFF);
-	pOvl->OffsetHigh = (offset >> 32);
-	if(WriteFile(file.handle, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
+	ZeroMemory(block, sizeof(BlockHandle));
+	block->Offset = (offset & 0xFFFFFFFF);
+	block->OffsetHigh = (offset >> 32);
+	if(WriteFile(file.handle, data, static_cast<DWORD>(size), NULL, block) == FALSE)
 	{
 		const auto error = GetLastError();
 
@@ -128,18 +126,14 @@ SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long lo
 			throw runtime_error("WriteFile() return error " + error);
 		}
 	}
-
-	return pOvl;
 }
 
-SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
+void SystemFile::readBlock(FileHandle file, unsigned long long offset, unsigned char *data, unsigned long long size, BlockHandle *block)
 {
-	LPOVERLAPPED pOvl = new OVERLAPPED;
-
-	ZeroMemory(pOvl, sizeof(OVERLAPPED));
-	pOvl->Offset = (offset & 0xFFFFFFFF);
-	pOvl->OffsetHigh = (offset >> 32);
-	if(ReadFile(file.handle, block, static_cast<DWORD>(size), NULL, pOvl) == FALSE)
+	ZeroMemory(block, sizeof(BlockHandle));
+	block->Offset = (offset & 0xFFFFFFFF);
+	block->OffsetHigh = (offset >> 32);
+	if(ReadFile(file.handle, data, static_cast<DWORD>(size), NULL, block) == FALSE)
 	{
 		const auto error = GetLastError();
 
@@ -148,11 +142,9 @@ SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long lon
 			throw runtime_error("ReadFile() return error " + error);
 		}
 	}
-
-	return pOvl;
 }
 
-SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
+SystemFile::BlockHandle* SystemFile::getCompletedBlock(FileHandle file)
 {
 	ULONG_PTR completionKey = 0;
 	DWORD bytesTransferred;
@@ -166,7 +158,6 @@ SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
 									   0);
 	if(result == TRUE)
 	{
-		delete pOvl;
 		return pOvl;
 	}
 	else if(pOvl != NULL)

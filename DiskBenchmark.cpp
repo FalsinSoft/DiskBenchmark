@@ -57,14 +57,8 @@ void DiskBenchmark::setCrcBlockCheck(bool crcBlock)
 
 DiskBenchmark::ThreadInfoList DiskBenchmark::executeTest(IOType ioType, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
 {
-	struct ThreadData
-	{
-		future<ThreadInfo> status;
-		thread instance;
-	};
 	const auto offsets = calculateOffsets(fileSize, blockSize, ioType, m_readPercentage, m_randomAccess);
 	const auto pageSize = m_systemFile->getMemoryPageSize();
-	vector<ThreadData> threads(threadNumber);
 	ThreadInfoList threadInfoList;
 	unsigned char *block;
 	bool result;
@@ -95,8 +89,14 @@ DiskBenchmark::ThreadInfoList DiskBenchmark::executeTest(IOType ioType, unsigned
 	m_logMsgFunction("Start test threads");
 	try
 	{
-		if(threads.size() > 1)
+		if(threadNumber > 1)
 		{
+			struct ThreadData
+			{
+				future<ThreadInfo> status;
+				thread instance;
+			};
+			vector<ThreadData> threads(threadNumber);
 			unsigned int startOffsetIndex = 0;
 
 			for(auto& thread : threads)
@@ -149,12 +149,18 @@ DiskBenchmark::ThreadInfo DiskBenchmark::executeTasks(unsigned int taskNumber, u
 {
 	struct TaskData
 	{
-		SystemFile::BlockHandle block = nullptr;
+		enum class State
+		{
+			Null,
+			Read,
+			Write
+		};
+		State state = State::Null;
+		SystemFile::BlockHandle block;
 		unsigned char *buffer = nullptr;
-		bool read = true;
 	};
 	chrono::time_point<chrono::steady_clock> startTime;
-	SystemFile::BlockHandle completedBlock;
+	SystemFile::BlockHandle *completedBlock;
 	int activeTasksCounter, offsetIndex, blocksCounter;
 	vector<TaskData> tasks(taskNumber);
 	SystemFile::FileHandle file;
@@ -182,23 +188,23 @@ DiskBenchmark::ThreadInfo DiskBenchmark::executeTasks(unsigned int taskNumber, u
 				running = (chrono::duration_cast<chrono::seconds>(chrono::steady_clock::now() - startTime).count() < m_secondsDuration) ? true : false;
 			}
 
-			if(running)
+			if(running == true && activeTasksCounter < taskNumber)
 			{
 				for(auto &task : tasks)
 				{
-					if(task.block == nullptr)
+					if(task.state == TaskData::State::Null)
 					{
 						const auto offset = offsets.at(offsetIndex++);
 
-						task.read = offset.read;
-						if(task.read == true)
+						task.state = offset.read ? TaskData::State::Read : TaskData::State::Write;
+						if(task.state == TaskData::State::Read)
 						{
-							task.block = m_systemFile->readBlock(file, offset.address, task.buffer, blockSize);
+							m_systemFile->readBlock(file, offset.address, task.buffer, blockSize, &task.block);
 						}
 						else
 						{
 							if(m_crcBlock) fillBlock(task.buffer, blockSize, true);
-							task.block = m_systemFile->writeBlock(file, offset.address, task.buffer, blockSize);
+							m_systemFile->writeBlock(file, offset.address, task.buffer, blockSize, &task.block);
 						}
 						activeTasksCounter++;
 						if(offsetIndex >= offsets.size()) offsetIndex = 0;
@@ -216,20 +222,20 @@ DiskBenchmark::ThreadInfo DiskBenchmark::executeTasks(unsigned int taskNumber, u
 			{
 				for(auto &task : tasks)
 				{
-					if(task.block == completedBlock)
+					if(&task.block == completedBlock)
 					{
-						if(task.read == true)
+						if(m_crcBlock == true && task.state == TaskData::State::Read)
 						{
-							if(m_crcBlock && !checkCrcBlock(task.buffer, blockSize)) throw runtime_error("Read block crc failed");
+							if(!checkCrcBlock(task.buffer, blockSize)) throw runtime_error("Read block crc failed");
 						}
-						task.block = nullptr;
-						activeTasksCounter--;
 
-						if(task.read == true)
+						if(task.state == TaskData::State::Read)
 							threadInfo.totalReadOperations++;
 						else
 							threadInfo.totalWriteOperations++;
 
+						task.state = TaskData::State::Null;
+						activeTasksCounter--;
 						break;
 					}
 				}

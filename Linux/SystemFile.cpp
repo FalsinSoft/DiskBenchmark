@@ -88,33 +88,25 @@ void SystemFile::closeFile(FileHandle file)
 	::close(file.handle);
 }
 
-SystemFile::BlockHandle SystemFile::writeBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
+void SystemFile::writeBlock(FileHandle file, unsigned long long offset, unsigned char *data, unsigned long long size, BlockHandle *block)
 {
-	iocb *request = new iocb;
-
-	io_prep_pwrite(request, file.handle, block, size, offset);
-	if(io_submit(file.context, 1, &request) != 1)
+	io_prep_pwrite(block, file.handle, data, size, offset);
+	if(io_submit(file.context, 1, &block) != 1)
 	{
 		throw runtime_error("io_submit() error");
 	}
-
-	return request;
 }
 
-SystemFile::BlockHandle SystemFile::readBlock(FileHandle file, unsigned long long offset, unsigned char *block, unsigned long long size)
+void SystemFile::readBlock(FileHandle file, unsigned long long offset, unsigned char *data, unsigned long long size, BlockHandle *block)
 {
-	iocb *request = new iocb;
-
-	io_prep_pread(request, file.handle, block, size, offset);
-	if(io_submit(file.context, 1, &request) != 1)
+	io_prep_pread(block, file.handle, data, size, offset);
+	if(io_submit(file.context, 1, &block) != 1)
 	{
 		throw runtime_error("io_submit() error");
 	}
-
-	return request;
 }
 
-SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
+SystemFile::BlockHandle* SystemFile::getCompletedBlock(FileHandle file)
 {
 	io_event event;
 
@@ -122,13 +114,11 @@ SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
 	io_getevents(file.context, 0, 1, &event, NULL);
 	if(event.obj != NULL);
 	{
-		iocb *request = event.obj;
 		if(event.res < 0)
 		{
 			throw runtime_error("io_getevents() event error");
 		}
-		delete request;
-		return request;
+		return event.obj;
 	}
 
 	return nullptr;
@@ -137,7 +127,7 @@ SystemFile::BlockHandle SystemFile::getCompletedBlock(FileHandle file)
 unsigned char* SystemFile::allocateAlignedMemory(unsigned long long size)
 {
 	void *ptr = nullptr;
-	posix_memalign(&ptr, 512, size);
+	posix_memalign(&ptr, getMemoryPageSize(), size);
 	return reinterpret_cast<unsigned char*>(ptr);
 }
 
@@ -148,5 +138,5 @@ void SystemFile::freeAlignedMemory(unsigned char *ptr)
 
 unsigned int SystemFile::getMemoryPageSize()
 {
-	return getpagesize();
+	return sysconf(_SC_PAGESIZE);
 }
