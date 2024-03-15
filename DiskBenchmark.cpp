@@ -3,6 +3,7 @@
 #include <random>
 #include <thread>
 #include "DiskBenchmark.h"
+#include "SystemFile.h"
 
 using namespace std;
 

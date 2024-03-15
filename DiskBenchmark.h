@@ -3,7 +3,8 @@
 #include <map>
 #include <vector>
 #include <future>
-#include "SystemFile.h"
+
+class SystemFile;
 
 class DiskBenchmark
 {
