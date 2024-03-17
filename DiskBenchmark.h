@@ -43,6 +43,7 @@ public:
 	void setWritePercentage(unsigned char writePercentage);
 	void setSecondsDuration(unsigned int seconds);
 	void setCrcBlockCheck(bool crcBlock);
+	void setUseExistingFile(bool useExistingFile);
 
 private:
 	std::unique_ptr<SystemFile> m_systemFile;
@@ -51,6 +52,7 @@ private:
 	bool m_unalignedOffsets, m_randomAccess, m_crcBlock;
 	unsigned char m_readPercentage;
 	unsigned int m_secondsDuration;
+	bool m_useExistingFile;
 
 	ThreadInfo executeTasks(unsigned int taskNumber, unsigned long long blockSize, unsigned int startOffsetIndex, const OffsetDataList& offsets);
 	void executeTasksThread(std::promise<ThreadInfo> promise, unsigned int taskNumber, unsigned long long blockSize, unsigned int startOffsetIndex, const OffsetDataList &offsets);

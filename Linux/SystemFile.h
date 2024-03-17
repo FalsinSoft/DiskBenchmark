@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <functional>
 #include <iostream>
 #include "libaio.h"
 
@@ -10,6 +11,8 @@ public:
 	SystemFile(std::exception_ptr &exception);
 	~SystemFile();
 
+	using LogMsgFunction = std::function<void(const std::string &logMsg)>;
+
 	struct FileHandle
 	{
 		int handle;
@@ -17,8 +20,10 @@ public:
 	};
 	using BlockHandle = iocb;
 
-	bool initialize(const std::string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize);
-	void close();
+	void setLogMsgFunction(const LogMsgFunction &logMsgFunction);
+
+	bool initialize(const std::string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize, bool useExisting = false);
+	void close(bool removeFile = true);
 
 	FileHandle openFile(unsigned int taskNumber);
 	void closeFile(FileHandle file);
@@ -33,4 +38,5 @@ private:
 	int m_hFile;
 	int m_fileFlags;
 	std::string m_fileName;
+	LogMsgFunction m_logMsgFunction;
 };

@@ -2,43 +2,55 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include "SystemFile.h"
 
 using namespace std;
 
-SystemFile::SystemFile(exception_ptr &exception) : m_hFile(-1)
+SystemFile::SystemFile(exception_ptr &exception) : m_hFile(-1),
+												   m_logMsgFunction([](const string &logMsg) {})
 {
 }
 
 SystemFile::~SystemFile()
 {
-	close();
 }
 
-bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize)
+void SystemFile::setLogMsgFunction(const LogMsgFunction &logMsgFunction)
+{
+	m_logMsgFunction = logMsgFunction;
+}
+
+bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize, bool useExisting)
 {
 	const auto blockNumber = (fileSize / blockSize);
-	int hFile;
+	struct stat fileStat;
 
-	close();
+	close(!useExisting);
 
-	hFile = open(fileName.c_str(), O_CREAT | O_WRONLY | O_TRUNC, S_IWUSR | S_IRUSR);
-	if(hFile == -1)
+	if(useExisting == false
+	|| stat(fileName.c_str(), &fileStat) < 0
+	|| fileStat.st_size != fileSize)
 	{
-		cerr << "Unable to create file " << fileName << endl;
-		return false;
-	}
-	for(unsigned long long i = 0; i < blockNumber; i++)
-	{
-		if(write(hFile, block, blockSize) != blockSize)
+		int hFile = open(fileName.c_str(), O_CREAT | O_WRONLY | O_TRUNC, S_IWUSR | S_IRUSR);
+		if(hFile == -1)
 		{
-			cerr << "Unable to write inside file " << fileName << endl;
+			cerr << "Unable to create file " << fileName << endl;
 			return false;
 		}
+		for(unsigned long long i = 0; i < blockNumber; i++)
+		{
+			if(write(hFile, block, blockSize) != blockSize)
+			{
+				cerr << "Unable to write inside file " << fileName << endl;
+				return false;
+			}
+		}
+		fsync(hFile);
+		::close(hFile);
+		m_logMsgFunction("New test file '" + fileName + "' created");
 	}
-	fsync(hFile);
-	::close(hFile);
-	
+
 	m_fileFlags = O_RDWR;
 	if(directAccess) m_fileFlags |= O_DIRECT;
 	m_hFile = open(fileName.c_str(), m_fileFlags);
@@ -53,13 +65,13 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 	return true;
 }
 
-void SystemFile::close()
+void SystemFile::close(bool removeFile)
 {
 	if(m_hFile != -1)
 	{
 		::close(m_hFile);
-		remove(m_fileName.c_str());
-
+		if(removeFile) remove(m_fileName.c_str());
+		m_fileName.clear();
 		m_hFile = -1;
 	}
 }

@@ -13,7 +13,8 @@ DiskBenchmark::DiskBenchmark() : m_systemFile(new SystemFile(m_exception)),
 								 m_randomAccess(false),
 								 m_readPercentage(50),
 								 m_secondsDuration(0),
-								 m_crcBlock(false)
+								 m_crcBlock(false),
+								 m_useExistingFile(false)
 {
 }
 
@@ -23,6 +24,7 @@ DiskBenchmark::~DiskBenchmark()
 
 void DiskBenchmark::setLogMsgFunction(const LogMsgFunction &logMsgFunction)
 {
+	m_systemFile->setLogMsgFunction(logMsgFunction);
 	m_logMsgFunction = logMsgFunction;
 }
 
@@ -56,6 +58,11 @@ void DiskBenchmark::setCrcBlockCheck(bool crcBlock)
 	m_crcBlock = crcBlock;
 }
 
+void DiskBenchmark::setUseExistingFile(bool useExistingFile)
+{
+	m_useExistingFile = useExistingFile;
+}
+
 DiskBenchmark::ThreadInfoList DiskBenchmark::executeTest(IOType ioType, unsigned int threadNumber, unsigned int taskNumber, const std::string &fileName, unsigned long long fileSize, unsigned long long blockSize)
 {
 	const auto offsets = calculateOffsets(fileSize, blockSize, ioType, m_readPercentage, m_randomAccess);
@@ -78,7 +85,7 @@ DiskBenchmark::ThreadInfoList DiskBenchmark::executeTest(IOType ioType, unsigned
 	m_logMsgFunction("Initialization...");
 	block = new unsigned char[blockSize];
 	fillBlock(block, blockSize, m_crcBlock);
-	result = m_systemFile->initialize(fileName, true, fileSize, block, blockSize);
+	result = m_systemFile->initialize(fileName, true, fileSize, block, blockSize, m_useExistingFile);
 	delete[] block;
 
 	if(result == false)
@@ -141,7 +148,7 @@ DiskBenchmark::ThreadInfoList DiskBenchmark::executeTest(IOType ioType, unsigned
 		threadInfoList.clear();
 	}
 	
-	m_systemFile->close();
+	m_systemFile->close(!m_useExistingFile);
 
 	return threadInfoList;
 }

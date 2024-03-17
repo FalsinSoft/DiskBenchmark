@@ -3,47 +3,61 @@
 
 using namespace std;
 
-SystemFile::SystemFile(exception_ptr &exception) : m_hFile(INVALID_HANDLE_VALUE)
+SystemFile::SystemFile(exception_ptr &exception) : m_hFile(INVALID_HANDLE_VALUE),
+												   m_logMsgFunction([](const string &logMsg) {})
 {
 }
 
 SystemFile::~SystemFile()
 {
-	close();
 }
 
-bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize)
+void SystemFile::setLogMsgFunction(const LogMsgFunction &logMsgFunction)
+{
+	m_logMsgFunction = logMsgFunction;
+}
+
+bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned long long fileSize, unsigned char *block, unsigned long long blockSize, bool useExisting)
 {
 	const auto blockNumber = (fileSize / blockSize);
+	WIN32_FILE_ATTRIBUTE_DATA fileInfo;
 	vector<TCHAR> name;
-	DWORD bytesWritten;
-	HANDLE hFile;
 
-	close();
+	close(!useExisting);
 
 	name.resize(MultiByteToWideChar(CP_ACP, 0, fileName.c_str(), -1, NULL, 0));
 	MultiByteToWideChar(CP_ACP, 0, fileName.c_str(), -1, name.data(), name.size());
 	
-	hFile = CreateFile(name.data(),
-					   GENERIC_WRITE,
-					   NULL,
-					   NULL,
-					   CREATE_ALWAYS,
-					   FILE_ATTRIBUTE_NORMAL,
-					   NULL);
-	if(hFile == INVALID_HANDLE_VALUE)
+	if(useExisting == false
+	|| GetFileAttributesEx(name.data(), GetFileExInfoStandard, &fileInfo) == FALSE
+	|| ((static_cast<unsigned long long>(fileInfo.nFileSizeHigh) << 32) | static_cast<unsigned long long>(fileInfo.nFileSizeLow)) != fileSize)
 	{
-		return false;
-	}
-	for(unsigned long long i = 0; i < blockNumber; i++)
-	{
-		if(WriteFile(hFile, block, static_cast<DWORD>(blockSize), &bytesWritten, NULL) == FALSE || bytesWritten != blockSize)
+		HANDLE hFile = CreateFile(name.data(),
+								  GENERIC_WRITE,
+								  NULL,
+								  NULL,
+								  CREATE_ALWAYS,
+								  FILE_ATTRIBUTE_NORMAL,
+								  NULL);
+		if(hFile == INVALID_HANDLE_VALUE)
 		{
+			cerr << "Unable to create file " << fileName << endl;
 			return false;
 		}
+		for(unsigned long long i = 0; i < blockNumber; i++)
+		{
+			DWORD bytesWritten = 0;
+
+			if(WriteFile(hFile, block, static_cast<DWORD>(blockSize), &bytesWritten, NULL) == FALSE || bytesWritten != blockSize)
+			{
+				cerr << "Unable to write inside file " << fileName << endl;
+				return false;
+			}
+		}
+		FlushFileBuffers(hFile);
+		CloseHandle(hFile);
+		m_logMsgFunction("New test file '" + fileName + "' created");
 	}
-	FlushFileBuffers(hFile);
-	CloseHandle(hFile);
 	
 	m_fileFlags = FILE_FLAG_OVERLAPPED;
 	if(directAccess) m_fileFlags |= (FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH);
@@ -63,7 +77,7 @@ bool SystemFile::initialize(const string &fileName, bool directAccess, unsigned 
 	return true;
 }
 
-void SystemFile::close()
+void SystemFile::close(bool removeFile)
 {
 	if(m_hFile != INVALID_HANDLE_VALUE)
 	{
@@ -71,7 +85,7 @@ void SystemFile::close()
 
 		GetFinalPathNameByHandle(m_hFile, filePath, MAX_PATH, VOLUME_NAME_DOS);
 		CloseHandle(m_hFile);
-		DeleteFile(filePath);
+		if(removeFile) DeleteFile(filePath);
 
 		m_hFile = INVALID_HANDLE_VALUE;
 	}

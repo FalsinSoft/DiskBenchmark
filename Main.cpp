@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 		return (round(((static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / (static_cast<double>(msDuration) / 1000.0)) * 10.0) / 10.0);
 	};
 	CLI::Option *optSeconds, *optIOType, *optRandom, *optThreadNumber, *optTaskNumber, *optUnalignedOffsets,
-				*optFileName, *optFileSize, *optBlockSize, *optShowLog, *optReadPercentage;
+				*optFileName, *optFileSize, *optBlockSize, *optShowLog, *optReadPercentage, *optUseExistingFile;
 	CLI::App app("DiskBenchmark");
 	DiskBenchmark diskBenchmark;
 	int seconds, threadNumber, taskNumber, readPercentage;
@@ -30,6 +30,7 @@ int main(int argc, char **argv)
 	optFileName = app.add_option("-n,--file_name", fileName, "Name of the file to use for test");
 	optFileSize = app.add_option("-z,--file_size", fileSize, "Size of the file to use for test (in Mb)");
 	optBlockSize = app.add_option("-b,--block_size", blockSize, "Size of the block to read/write (in Kb)");
+	optUseExistingFile = app.add_flag("-e,--use_existing", "If already exist a test file use it instead of create a new one");
 	optShowLog = app.add_flag("-l,--log", "Show log messages");
 	CLI11_PARSE(app, argc, argv);
 	
@@ -70,6 +71,7 @@ int main(int argc, char **argv)
 	}
 	diskBenchmark.setRandomAccess((optRandom->count() > 0) ? true : false);
 	diskBenchmark.setUnalignedOffsets((optUnalignedOffsets->count() > 0) ? true : false);
+	diskBenchmark.setUseExistingFile((optUseExistingFile->count() > 0) ? true : false);
 	fileSize *= (1024 * 1024);
 	blockSize *= 1024;
 

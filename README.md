@@ -13,4 +13,5 @@ Options:\
 &emsp;-n,--file_name TEXT&emsp;&emsp;&emsp;&ensp;Name of the file to use for test\
 &emsp;-z,--file_size INT&emsp;&emsp;&emsp;&emsp;&emsp;Size of the file to use for test (in Mb)\
 &emsp;-b,--block_size INT&emsp;&emsp;&emsp;&ensp;&nbsp;Size of the block to read/write (in Kb)\
+&emsp;-e,--use_existing&emsp;&emsp;&emsp;&ensp;&nbsp;&nbsp;&nbsp;&nbsp;If already exist a test file use it instead of create a new one\
 &emsp;-l,--log INT&emsp;&emsp;&emsp;&ensp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Show log messages
